@@ -1,0 +1,68 @@
+name: ECS Swift Deploy
+description: Update an ECS service and wait for that exact deployment, failing fast on the first stopped task
+author: Maksym Tarasenko
+branding:
+  icon: upload-cloud
+  color: orange
+
+inputs:
+  cluster:
+    description: ECS cluster name or ARN
+    required: true
+  service:
+    description: ECS service name or ARN
+    required: true
+  task-definition:
+    description: Full task definition ARN with revision
+    required: false
+  force-new-deployment:
+    description: Redeploy even if the task definition is unchanged
+    default: 'false'
+  region:
+    description: AWS region; defaults to AWS_REGION
+    required: false
+  timeout:
+    description: Total deadline
+    default: 20m
+  interval:
+    description: Delay between polls
+    default: 5s
+  success-checks:
+    description: Consecutive successful polls before exit
+    default: '2'
+  log-lines:
+    description: CloudWatch events per container on task failure
+    default: '100'
+  version:
+    description: Release tag to use, e.g. v0.1.0; defaults to the version of this action ref
+    required: false
+
+outputs:
+  deployment-id:
+    description: ECS deployment ID
+    value: ${{ steps.deploy.outputs.deployment-id }}
+  task-definition:
+    description: Deployed task definition ARN
+    value: ${{ steps.deploy.outputs.task-definition }}
+  elapsed-seconds:
+    description: Time spent in the deploy
+    value: ${{ steps.deploy.outputs.elapsed-seconds }}
+
+runs:
+  using: composite
+  steps:
+    - id: deploy
+      shell: bash
+      env:
+        ACTION_REPO: ${{ github.action_repository }}
+        INPUT_CLUSTER: ${{ inputs.cluster }}
+        INPUT_SERVICE: ${{ inputs.service }}
+        INPUT_TASK_DEFINITION: ${{ inputs.task-definition }}
+        INPUT_FORCE: ${{ inputs.force-new-deployment }}
+        INPUT_REGION: ${{ inputs.region }}
+        INPUT_TIMEOUT: ${{ inputs.timeout }}
+        INPUT_INTERVAL: ${{ inputs.interval }}
+        INPUT_SUCCESS_CHECKS: ${{ inputs.success-checks }}
+        INPUT_LOG_LINES: ${{ inputs.log-lines }}
+        INPUT_VERSION: ${{ inputs.version }}
+      run: bash "$GITHUB_ACTION_PATH/scripts/action.sh"

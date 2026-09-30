@@ -1,0 +1,7 @@
+/ecs-deploy
+/ecs-deploy-*
+/dist/
+/coverage.out
+.DS_Store
+.idea/
+/ecs-swift-deploy
