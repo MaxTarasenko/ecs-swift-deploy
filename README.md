@@ -159,8 +159,8 @@ Timeout or interrupt only stops waiting; the ECS deployment keeps going.
 
 ```sh
 go test -race ./...
-./build.sh                      # dev build for this machine: ./ecs-deploy
-./build.sh linux/amd64          # cross-build: ./ecs-deploy-linux-amd64
+./build.sh                      # dev build for this machine into build/
+./build.sh linux/amd64          # cross-build into build/
 bash scripts/build-release.sh   # all release binaries in dist/
 ```
 
