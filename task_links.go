@@ -50,6 +50,11 @@ func taskConsoleURL(taskARN, cluster string) (string, error) {
 		"/tasks/" + url.PathEscape(parts[len(parts)-1]) + "?region=" + url.QueryEscape(a.Region), nil
 }
 
+func serviceConsoleURL(taskLink, service string) string {
+	return taskLink[:strings.Index(taskLink, "/tasks/")] + "/services/" + url.PathEscape(serviceName(service)) +
+		"/deployments" + taskLink[strings.Index(taskLink, "?"):]
+}
+
 func printNewTaskLinks(ctx context.Context, api ecsAPI, o options, deploymentID string, printed map[string]bool, w io.Writer) error {
 	// Budget covers all pages, not each request.
 	budget := o.requestTimeout

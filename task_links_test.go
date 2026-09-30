@@ -108,3 +108,29 @@ func TestTaskLinkPrintedBeforeCompletion(t *testing.T) {
 		t.Fatalf("link was not printed early: %s", log.String())
 	}
 }
+
+func TestNoWaitExitsOnceTaskAppears(t *testing.T) {
+	progress := fixture("new", newTD)
+	progress.Deployments[0].RolloutState = types.DeploymentRolloutStateInProgress
+	f := &taskListFake{
+		fakeECS: fakeECS{snapshots: []*types.Service{fixture("old", oldTD), progress}, update: progress},
+		pages:   []*ecs.ListTasksOutput{{TaskArns: []string{"arn:aws:ecs:eu-central-1:123456789012:task/prod/aaa"}}},
+	}
+	o := testOptions()
+	o.noWait = true
+	var out, log bytes.Buffer
+	if err := deploy(context.Background(), f, o, &out, &log); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), `"status":"STARTED"`) || !strings.Contains(log.String(), "SKIPPED WAIT") ||
+		!strings.Contains(log.String(), "/ecs/v2/clusters/prod/services/app/deployments?region=eu-central-1") {
+		t.Fatalf("out=%s log=%s", out.String(), log.String())
+	}
+}
+
+func TestNoWaitConflictsWithWaitDrain(t *testing.T) {
+	_, err := parseArgs([]string{"--cluster", "c", "--service", "s", "--force-new-deployment", "--no-wait", "--wait-drain"}, io.Discard)
+	if err == nil {
+		t.Fatal("expected conflict error")
+	}
+}

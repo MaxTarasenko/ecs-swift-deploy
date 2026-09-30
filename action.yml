@@ -18,6 +18,9 @@ inputs:
   force-new-deployment:
     description: Redeploy even if the task definition is unchanged
     default: 'false'
+  no-wait:
+    description: Exit once the first new task appears and print its link; the rollout is not verified
+    default: 'false'
   wait-drain:
     description: Also wait until old tasks have fully stopped
     default: 'false'
@@ -41,6 +44,9 @@ inputs:
     required: false
 
 outputs:
+  status:
+    description: COMPLETED, or STARTED with no-wait
+    value: ${{ steps.deploy.outputs.status }}
   deployment-id:
     description: ECS deployment ID
     value: ${{ steps.deploy.outputs.deployment-id }}
@@ -63,6 +69,7 @@ runs:
         INPUT_TASK_DEFINITION: ${{ inputs.task-definition }}
         INPUT_FORCE: ${{ inputs.force-new-deployment }}
         INPUT_WAIT_DRAIN: ${{ inputs.wait-drain }}
+        INPUT_NO_WAIT: ${{ inputs.no-wait }}
         INPUT_REGION: ${{ inputs.region }}
         INPUT_TIMEOUT: ${{ inputs.timeout }}
         INPUT_INTERVAL: ${{ inputs.interval }}

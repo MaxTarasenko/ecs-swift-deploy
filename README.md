@@ -8,6 +8,8 @@ Fails fast on the first stopped task and prints its reason and CloudWatch logs.
 - Exits `1` on the first stopped task of the new deployment, even if ECS replaces it.
 - Polls every 5s; exits when ECS marks the service deployment `SUCCESSFUL` (the console's Success),
   without waiting for old tasks to drain. `--wait-drain` waits for `rolloutState=COMPLETED` instead.
+- `--no-wait` exits once the first new task appears, prints its and the service's console links
+  and leaves the rollout unverified. Use it for services you check yourself.
 - Read-only preflight before any write; `UpdateService` is never retried automatically.
 
 ## GitHub Action
@@ -30,9 +32,9 @@ Fails fast on the first stopped task and prints its reason and CloudWatch logs.
     task-definition: ${{ steps.register.outputs.task-definition-arn }}
 ```
 
-Inputs: `cluster`, `service`, `task-definition`, `force-new-deployment`, `wait-drain`, `region`,
+Inputs: `cluster`, `service`, `task-definition`, `force-new-deployment`, `no-wait`, `wait-drain`, `region`,
 `timeout`, `interval`, `success-checks`, `log-lines`, `version`.
-Outputs: `deployment-id`, `task-definition`, `elapsed-seconds`.
+Outputs: `status`, `deployment-id`, `task-definition`, `elapsed-seconds`.
 Runs on Linux and macOS runners (amd64/arm64).
 
 ## Binary
@@ -132,7 +134,7 @@ On success stdout gets one JSON line; everything else goes to stderr:
 
 | Exit code | Meaning |
 |---|---|
-| 0 | Deployment completed |
+| 0 | Deployment completed, or task started with `--no-wait` |
 | 1 | Deployment or task failed, AWS error, unsupported service |
 | 2 | Bad arguments |
 | 3 | AWS permission denied |

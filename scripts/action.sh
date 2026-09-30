@@ -35,11 +35,13 @@ args=(--cluster "$INPUT_CLUSTER" --service "$INPUT_SERVICE"
 [[ -n "${INPUT_TASK_DEFINITION:-}" ]] && args+=(--task-definition "$INPUT_TASK_DEFINITION")
 [[ "${INPUT_FORCE:-false}" == "true" ]] && args+=(--force-new-deployment)
 [[ "${INPUT_WAIT_DRAIN:-false}" == "true" ]] && args+=(--wait-drain)
+[[ "${INPUT_NO_WAIT:-false}" == "true" ]] && args+=(--no-wait)
 [[ -n "${INPUT_REGION:-}" ]] && args+=(--region "$INPUT_REGION")
 
 result=$("$bin" "${args[@]}")
 echo "$result"
 {
+  echo "status=$(jq -r .status <<<"$result")"
   echo "deployment-id=$(jq -r .deployment_id <<<"$result")"
   echo "task-definition=$(jq -r .task_definition <<<"$result")"
   echo "elapsed-seconds=$(jq -r .elapsed_seconds <<<"$result")"

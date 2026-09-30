@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"regexp"
+	"sort"
 	"syscall"
 	"time"
 
@@ -24,7 +25,7 @@ import (
 
 type options struct {
 	cluster, service, taskDefinition, region, profile string
-	force, waitDrain                                  bool
+	force, waitDrain, noWait                          bool
 	showVersion                                       bool
 	interval, timeout, requestTimeout                 time.Duration
 	logLines                                          int
@@ -57,6 +58,7 @@ func parseArgs(args []string, stderr io.Writer) (options, error) {
 	f.StringVar(&o.profile, "profile", "", "AWS shared config profile")
 	f.BoolVar(&o.force, "force-new-deployment", false, "Redeploy even when the task definition has not changed")
 	f.BoolVar(&o.waitDrain, "wait-drain", false, "Also wait until old tasks have fully stopped")
+	f.BoolVar(&o.noWait, "no-wait", false, "Exit once the first new task appears; the rollout is not verified")
 	f.DurationVar(&o.interval, "interval", 5*time.Second, "Fixed delay between polls")
 	f.DurationVar(&o.timeout, "timeout", 20*time.Minute, "Total deadline, including preflight and update")
 	f.DurationVar(&o.requestTimeout, "request-timeout", 30*time.Second, "Deadline per AWS call, including SDK retries")
@@ -83,6 +85,9 @@ func parseArgs(args []string, stderr io.Writer) (options, error) {
 	}
 	if o.interval < time.Second || o.timeout <= 0 || o.requestTimeout <= 0 {
 		return o, errors.New("interval must be >=1s; timeouts must be positive")
+	}
+	if o.noWait && o.waitDrain {
+		return o, errors.New("--no-wait and --wait-drain are mutually exclusive")
 	}
 	if o.successChecks < 1 || o.successChecks > 10 {
 		return o, errors.New("success-checks must be 1..10")
@@ -334,6 +339,10 @@ func deploy(ctx context.Context, api ecsAPI, o options, stdout, stderr io.Writer
 				return fmt.Errorf("%w: ECS reports failedTasks=%d; stopped task details/logs are not visible yet", errTaskStopped, d.FailedTasks)
 			}
 		}
+		if o.noWait && len(printedTasks) > 0 {
+			skipWait(stderr, o, id, printedTasks)
+			return writeResult(stdout, "STARTED", id, td, start)
+		}
 		// ECS may briefly return a pre-update snapshot; it never counts as success.
 		present := false
 		for _, d := range s.Deployments {
@@ -396,17 +405,43 @@ func deploy(ctx context.Context, api ecsAPI, o options, stdout, stderr io.Writer
 				if err := ctx.Err(); err != nil {
 					return err
 				}
-				return json.NewEncoder(stdout).Encode(struct {
-					Status         string  `json:"status"`
-					DeploymentID   string  `json:"deployment_id"`
-					TaskDefinition string  `json:"task_definition"`
-					ElapsedSeconds float64 `json:"elapsed_seconds"`
-				}{"COMPLETED", id, td, time.Since(start).Seconds()})
+				return writeResult(stdout, "COMPLETED", id, td, start)
 			}
 		}
 		if err := pause(ctx, o.interval); err != nil {
 			return err
 		}
+	}
+}
+
+func writeResult(w io.Writer, status, id, td string, start time.Time) error {
+	return json.NewEncoder(w).Encode(struct {
+		Status         string  `json:"status"`
+		DeploymentID   string  `json:"deployment_id"`
+		TaskDefinition string  `json:"task_definition"`
+		ElapsedSeconds float64 `json:"elapsed_seconds"`
+	}{status, id, td, time.Since(start).Seconds()})
+}
+
+func skipWait(w io.Writer, o options, id string, tasks map[string]bool) {
+	arns := make([]string, 0, len(tasks))
+	for a := range tasks {
+		arns = append(arns, a)
+	}
+	sort.Strings(arns)
+	fmt.Fprintf(w, "SKIPPED WAIT: %s/%s deployment %s is not verified; check its status in ECS yourself.\n", o.cluster, o.service, id)
+	service := ""
+	for _, a := range arns {
+		link, err := taskConsoleURL(a, o.cluster)
+		if err != nil {
+			link = a
+		} else {
+			service = serviceConsoleURL(link, o.service)
+		}
+		fmt.Fprintf(w, "  task: %s\n", link)
+	}
+	if service != "" {
+		fmt.Fprintf(w, "  service: %s\n", service)
 	}
 }
 
