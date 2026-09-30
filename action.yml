@@ -18,6 +18,9 @@ inputs:
   force-new-deployment:
     description: Redeploy even if the task definition is unchanged
     default: 'false'
+  wait-drain:
+    description: Also wait until old tasks have fully stopped
+    default: 'false'
   region:
     description: AWS region; defaults to AWS_REGION
     required: false
@@ -59,6 +62,7 @@ runs:
         INPUT_SERVICE: ${{ inputs.service }}
         INPUT_TASK_DEFINITION: ${{ inputs.task-definition }}
         INPUT_FORCE: ${{ inputs.force-new-deployment }}
+        INPUT_WAIT_DRAIN: ${{ inputs.wait-drain }}
         INPUT_REGION: ${{ inputs.region }}
         INPUT_TIMEOUT: ${{ inputs.timeout }}
         INPUT_INTERVAL: ${{ inputs.interval }}

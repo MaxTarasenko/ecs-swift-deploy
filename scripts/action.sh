@@ -34,6 +34,7 @@ args=(--cluster "$INPUT_CLUSTER" --service "$INPUT_SERVICE"
   --success-checks "$INPUT_SUCCESS_CHECKS" --log-lines "$INPUT_LOG_LINES")
 [[ -n "${INPUT_TASK_DEFINITION:-}" ]] && args+=(--task-definition "$INPUT_TASK_DEFINITION")
 [[ "${INPUT_FORCE:-false}" == "true" ]] && args+=(--force-new-deployment)
+[[ "${INPUT_WAIT_DRAIN:-false}" == "true" ]] && args+=(--wait-drain)
 [[ -n "${INPUT_REGION:-}" ]] && args+=(--region "$INPUT_REGION")
 
 result=$("$bin" "${args[@]}")

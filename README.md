@@ -6,7 +6,8 @@ Fails fast on the first stopped task and prints its reason and CloudWatch logs.
 - Tracks the deployment ID returned by `UpdateService`, not overall service stability.
 - Prints an AWS Console link for every new task as soon as it appears.
 - Exits `1` on the first stopped task of the new deployment, even if ECS replaces it.
-- Polls every 5s; success needs `COMPLETED`, all tasks on the new revision, no old tasks left.
+- Polls every 5s; success needs `COMPLETED` and all desired tasks running on the new revision.
+- Exits as soon as ECS shows Success, while old tasks may still be draining; `--wait-drain` waits for them to stop.
 - Read-only preflight before any write; `UpdateService` is never retried automatically.
 
 ## GitHub Action
@@ -29,7 +30,7 @@ Fails fast on the first stopped task and prints its reason and CloudWatch logs.
     task-definition: ${{ steps.register.outputs.task-definition-arn }}
 ```
 
-Inputs: `cluster`, `service`, `task-definition`, `force-new-deployment`, `region`,
+Inputs: `cluster`, `service`, `task-definition`, `force-new-deployment`, `wait-drain`, `region`,
 `timeout`, `interval`, `success-checks`, `log-lines`, `version`.
 Outputs: `deployment-id`, `task-definition`, `elapsed-seconds`.
 Runs on Linux and macOS runners (amd64/arm64).

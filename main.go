@@ -24,7 +24,7 @@ import (
 
 type options struct {
 	cluster, service, taskDefinition, region, profile string
-	force                                             bool
+	force, waitDrain                                  bool
 	showVersion                                       bool
 	interval, timeout, requestTimeout                 time.Duration
 	logLines                                          int
@@ -55,6 +55,7 @@ func parseArgs(args []string, stderr io.Writer) (options, error) {
 	f.StringVar(&o.region, "region", "", "AWS region; default: AWS config/environment")
 	f.StringVar(&o.profile, "profile", "", "AWS shared config profile")
 	f.BoolVar(&o.force, "force-new-deployment", false, "Redeploy even when the task definition has not changed")
+	f.BoolVar(&o.waitDrain, "wait-drain", false, "Also wait until old tasks have fully stopped")
 	f.DurationVar(&o.interval, "interval", 5*time.Second, "Fixed delay between polls")
 	f.DurationVar(&o.timeout, "timeout", 20*time.Minute, "Total deadline, including preflight and update")
 	f.DurationVar(&o.requestTimeout, "request-timeout", 30*time.Second, "Deadline per AWS call, including SDK retries")
@@ -127,8 +128,8 @@ func primary(s *types.Service) (*types.Deployment, error) {
 	return found, nil
 }
 
-// Success is tied to the deployment ID, not to overall service stability.
-func evaluate(s *types.Service, id, td string) (bool, string, error) {
+// Success is tied to the deployment ID; old tasks may still be draining unless waitDrain.
+func evaluate(s *types.Service, id, td string, waitDrain bool) (bool, string, error) {
 	if err := validateService(s); err != nil {
 		return false, "", err
 	}
@@ -167,8 +168,10 @@ func evaluate(s *types.Service, id, td string) (bool, string, error) {
 		}
 	}
 	ok := state == "COMPLETED" && target.DesiredCount == s.DesiredCount &&
-		target.RunningCount == s.DesiredCount && target.PendingCount == 0 &&
-		s.RunningCount == s.DesiredCount && s.PendingCount == 0 && oldRunning == 0 && oldPending == 0
+		target.RunningCount == s.DesiredCount && target.PendingCount == 0
+	if waitDrain {
+		ok = ok && s.RunningCount == s.DesiredCount && s.PendingCount == 0 && oldRunning == 0 && oldPending == 0
+	}
 	msg := fmt.Sprintf("%s state=%s new=%d/%d pending=%d old=%d old-pending=%d failed-tasks=%d",
 		id, state, target.RunningCount, s.DesiredCount, target.PendingCount, oldRunning, oldPending, target.FailedTasks)
 	return ok, msg, nil
@@ -341,7 +344,7 @@ func deploy(ctx context.Context, api ecsAPI, o options, stdout, stderr io.Writer
 			fmt.Fprintln(stderr, "Waiting for new deployment to become visible")
 		} else {
 			seen = seen || present
-			ok, message, checkErr := evaluate(s, id, td)
+			ok, message, checkErr := evaluate(s, id, td, o.waitDrain)
 			if checkErr != nil {
 				return checkErr
 			}

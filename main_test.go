@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -68,15 +69,20 @@ func TestEvaluate(t *testing.T) {
 		}, false, true},
 		{"ambiguous-primary", func(s *types.Service) { s.Deployments = append(s.Deployments, fixture("other", newTD).Deployments[0]) }, false, true},
 	}
+	// Old tasks still draining block success only with --wait-drain.
+	drainOnly := map[string]bool{"service-pending": true, "service-extra-tasks": true, "old-still-running": true, "old-pending": true}
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			s := fixture("new", newTD)
-			tt.change(s)
-			ok, _, err := evaluate(s, "new", newTD)
-			if ok != tt.ok || (err != nil) != tt.bad {
-				t.Fatalf("ok=%v err=%v; wanted ok=%v bad=%v", ok, err, tt.ok, tt.bad)
-			}
-		})
+		for _, waitDrain := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/wait-drain=%v", tt.name, waitDrain), func(t *testing.T) {
+				s := fixture("new", newTD)
+				tt.change(s)
+				want := tt.ok || (drainOnly[tt.name] && !waitDrain)
+				ok, _, err := evaluate(s, "new", newTD, waitDrain)
+				if ok != want || (err != nil) != tt.bad {
+					t.Fatalf("ok=%v err=%v; wanted ok=%v bad=%v", ok, err, want, tt.bad)
+				}
+			})
+		}
 	}
 }
 
