@@ -52,6 +52,77 @@ Checksums are in `SHA256SUMS` next to the binaries.
 Redeploy the current revision: `--force-new-deployment` instead of `--task-definition`.
 All flags: `ecs-deploy --help`.
 
+## AWS credentials
+
+The standard AWS SDK chain is used, same as the AWS CLI: `AWS_ACCESS_KEY_ID`,
+`AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_REGION`, `AWS_PROFILE`,
+OIDC web identity, ECS task role or EC2 instance profile.
+If your CI stores them under other names, map them to these variables.
+
+GitHub Actions with OIDC (no stored keys):
+
+```yaml
+permissions:
+  id-token: write
+  contents: read
+steps:
+  - uses: aws-actions/configure-aws-credentials@v6
+    with:
+      role-to-assume: arn:aws:iam::123456789012:role/deploy
+      aws-region: eu-central-1
+  - uses: MaxTarasenko/ecs-swift-deploy@v0.1.0
+    with: { cluster: my-cluster, service: my-service, task-definition: "${{ env.TD_ARN }}" }
+```
+
+GitHub Actions with stored keys:
+
+```yaml
+- uses: MaxTarasenko/ecs-swift-deploy@v0.1.0
+  env:
+    AWS_ACCESS_KEY_ID: ${{ secrets.PROD_AWS_KEY }}
+    AWS_SECRET_ACCESS_KEY: ${{ secrets.PROD_AWS_SECRET }}
+    AWS_REGION: eu-central-1
+  with: { cluster: my-cluster, service: my-service, task-definition: "${{ env.TD_ARN }}" }
+```
+
+GitLab CI with stored keys:
+
+```yaml
+deploy:
+  variables:
+    AWS_ACCESS_KEY_ID: $PROD_AWS_KEY
+    AWS_SECRET_ACCESS_KEY: $PROD_AWS_SECRET
+    AWS_REGION: eu-central-1
+  script:
+    - ./ecs-deploy --cluster my-cluster --service my-service --task-definition "$TD_ARN"
+```
+
+GitLab CI with OIDC:
+
+```yaml
+deploy:
+  id_tokens:
+    AWS_TOKEN: { aud: sts.amazonaws.com }
+  variables:
+    AWS_ROLE_ARN: arn:aws:iam::123456789012:role/deploy
+    AWS_REGION: eu-central-1
+  script:
+    - echo "$AWS_TOKEN" > "$CI_PROJECT_DIR/.aws-token"
+    - AWS_WEB_IDENTITY_TOKEN_FILE="$CI_PROJECT_DIR/.aws-token" ./ecs-deploy --cluster my-cluster --service my-service --task-definition "$TD_ARN"
+```
+
+Binary, inline for one command or via a profile from `~/.aws/config`:
+
+```sh
+AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=... \
+  ./ecs-deploy --region eu-central-1 --cluster my-cluster --service my-service --force-new-deployment
+
+./ecs-deploy --profile prod --region eu-central-1 --cluster my-cluster --service my-service --force-new-deployment
+```
+
+Keys are not accepted as flags: arguments leak into process lists and CI logs.
+Missing or expired credentials fail with `AWS_AUTH_ERROR`.
+
 On success stdout gets one JSON line; everything else goes to stderr:
 
 ```json
