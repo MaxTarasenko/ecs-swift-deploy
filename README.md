@@ -6,8 +6,8 @@ Fails fast on the first stopped task and prints its reason and CloudWatch logs.
 - Tracks the deployment ID returned by `UpdateService`, not overall service stability.
 - Prints an AWS Console link for every new task as soon as it appears.
 - Exits `1` on the first stopped task of the new deployment, even if ECS replaces it.
-- Polls every 5s; success needs `COMPLETED` and all desired tasks running on the new revision.
-- Exits as soon as ECS shows Success, while old tasks may still be draining; `--wait-drain` waits for them to stop.
+- Polls every 5s; exits when ECS marks the service deployment `SUCCESSFUL` (the console's Success),
+  without waiting for old tasks to drain. `--wait-drain` waits for `rolloutState=COMPLETED` instead.
 - Read-only preflight before any write; `UpdateService` is never retried automatically.
 
 ## GitHub Action
@@ -145,6 +145,7 @@ Timeout or interrupt only stops waiting; the ECS deployment keeps going.
 
 - `ecs:DescribeServices`, `ecs:UpdateService`
 - `ecs:DescribeTaskDefinition`, `ecs:ListTasks`, `ecs:DescribeTasks`
+- `ecs:ListServiceDeployments` (optional; without it the exit waits for old tasks to stop)
 - `logs:GetLogEvents` on the task log streams
 - `iam:PassRole` for the task and execution roles, if the task definition has them
 

@@ -77,7 +77,7 @@ func TestEvaluate(t *testing.T) {
 				s := fixture("new", newTD)
 				tt.change(s)
 				want := tt.ok || (drainOnly[tt.name] && !waitDrain)
-				ok, _, err := evaluate(s, "new", newTD, waitDrain)
+				ok, _, err := evaluate(s, "new", newTD, waitDrain, false)
 				if ok != want || (err != nil) != tt.bad {
 					t.Fatalf("ok=%v err=%v; wanted ok=%v bad=%v", ok, err, want, tt.bad)
 				}
@@ -92,6 +92,12 @@ type fakeECS struct {
 	updateErr      error
 	updates, reads int
 	input          *ecs.UpdateServiceInput
+	sd             []types.ServiceDeploymentBrief
+	sdErr          error
+}
+
+func (f *fakeECS) ListServiceDeployments(context.Context, *ecs.ListServiceDeploymentsInput, ...func(*ecs.Options)) (*ecs.ListServiceDeploymentsOutput, error) {
+	return &ecs.ListServiceDeploymentsOutput{ServiceDeployments: f.sd}, f.sdErr
 }
 
 func (f *fakeECS) ListTasks(context.Context, *ecs.ListTasksInput, ...func(*ecs.Options)) (*ecs.ListTasksOutput, error) {

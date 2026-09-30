@@ -40,6 +40,7 @@ type ecsAPI interface {
 	ListTasks(context.Context, *ecs.ListTasksInput, ...func(*ecs.Options)) (*ecs.ListTasksOutput, error)
 	DescribeTasks(context.Context, *ecs.DescribeTasksInput, ...func(*ecs.Options)) (*ecs.DescribeTasksOutput, error)
 	DescribeTaskDefinition(context.Context, *ecs.DescribeTaskDefinitionInput, ...func(*ecs.Options)) (*ecs.DescribeTaskDefinitionOutput, error)
+	ListServiceDeployments(context.Context, *ecs.ListServiceDeploymentsInput, ...func(*ecs.Options)) (*ecs.ListServiceDeploymentsOutput, error)
 }
 
 var taskARN = regexp.MustCompile(`^arn:[^:]+:ecs:[^:]+:[0-9]{12}:task-definition/[^:]+:[0-9]+$`)
@@ -129,7 +130,7 @@ func primary(s *types.Service) (*types.Deployment, error) {
 }
 
 // Success is tied to the deployment ID; old tasks may still be draining unless waitDrain.
-func evaluate(s *types.Service, id, td string, waitDrain bool) (bool, string, error) {
+func evaluate(s *types.Service, id, td string, waitDrain, ecsSuccessful bool) (bool, string, error) {
 	if err := validateService(s); err != nil {
 		return false, "", err
 	}
@@ -167,7 +168,8 @@ func evaluate(s *types.Service, id, td string, waitDrain bool) (bool, string, er
 			oldPending += d.PendingCount
 		}
 	}
-	ok := state == "COMPLETED" && target.DesiredCount == s.DesiredCount &&
+	done := state == "COMPLETED" || (ecsSuccessful && !waitDrain)
+	ok := done && target.DesiredCount == s.DesiredCount &&
 		target.RunningCount == s.DesiredCount && target.PendingCount == 0
 	if waitDrain {
 		ok = ok && s.RunningCount == s.DesiredCount && s.PendingCount == 0 && oldRunning == 0 && oldPending == 0
@@ -300,6 +302,8 @@ func deploy(ctx context.Context, api ecsAPI, o options, stdout, stderr io.Writer
 	ignoredTasks := make(map[string]bool)
 	confirmations := 0
 	var confirmedDesired int32
+	useServiceDeployments := !o.waitDrain
+	lastSDWarning := ""
 	for {
 		// Informational only; never decides success.
 		if linkErr := printNewTaskLinks(ctx, api, o, id, printedTasks, stderr); linkErr != nil {
@@ -344,9 +348,30 @@ func deploy(ctx context.Context, api ecsAPI, o options, stdout, stderr io.Writer
 			fmt.Fprintln(stderr, "Waiting for new deployment to become visible")
 		} else {
 			seen = seen || present
-			ok, message, checkErr := evaluate(s, id, td, o.waitDrain)
+			var sdStatus types.ServiceDeploymentStatus
+			if useServiceDeployments {
+				status, reason, sdErr := serviceDeploymentStatus(ctx, api, o, id, updatedAt)
+				switch {
+				case errors.Is(sdErr, errPermission):
+					useServiceDeployments = false
+					fmt.Fprintf(stderr, "WARNING: %v\nFalling back to rolloutState=COMPLETED, which waits for old tasks to stop\n", sdErr)
+				case sdErr != nil:
+					if sdErr.Error() != lastSDWarning {
+						fmt.Fprintf(stderr, "WARNING: service deployment status unavailable: %v\n", sdErr)
+						lastSDWarning = sdErr.Error()
+					}
+				case serviceDeploymentFailed(status):
+					return fmt.Errorf("service deployment %s: %s", status, reason)
+				default:
+					sdStatus = status
+				}
+			}
+			ok, message, checkErr := evaluate(s, id, td, o.waitDrain, sdStatus == types.ServiceDeploymentStatusSuccessful)
 			if checkErr != nil {
 				return checkErr
+			}
+			if sdStatus != "" {
+				message += " ecs=" + string(sdStatus)
 			}
 			fmt.Fprintf(stderr, "[%s] %s\n", time.Since(start).Round(time.Second), message)
 			if tasksPending {
