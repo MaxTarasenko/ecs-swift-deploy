@@ -159,7 +159,9 @@ Timeout or interrupt only stops waiting; the ECS deployment keeps going.
 
 ```sh
 go test -race ./...
-bash scripts/build-release.sh   # binaries in dist/
+./build.sh                      # dev build for this machine: ./ecs-deploy
+./build.sh linux/amd64          # cross-build: ./ecs-deploy-linux-amd64
+bash scripts/build-release.sh   # all release binaries in dist/
 ```
 
 Every push to `main` releases `v$(cat VERSION)` if that tag doesn't exist yet.
